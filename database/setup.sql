@@ -1,0 +1,3 @@
+-- Supabase projects already provide the database.
+-- Run schema.sql in the Supabase SQL Editor, then from the server directory:
+-- npm run seed
