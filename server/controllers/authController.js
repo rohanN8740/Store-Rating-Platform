@@ -24,7 +24,7 @@ const generateToken = (user) => {
 const setAuthCookie = (res, token) => {
   const attributes = [
     "HttpOnly",
-    "SameSite=Lax",
+    `SameSite=${process.env.NODE_ENV === "production" ? "None" : "Lax"}`,
     "Path=/",
     `Max-Age=${7 * 24 * 60 * 60}`,
   ];
@@ -32,7 +32,7 @@ const setAuthCookie = (res, token) => {
   const oldCookie = [
     "authToken=",
     "HttpOnly",
-    "SameSite=Lax",
+    `SameSite=${process.env.NODE_ENV === "production" ? "None" : "Lax"}`,
     "Path=/api/auth",
     "Max-Age=0",
   ];
@@ -203,8 +203,20 @@ export const login = async (req, res) => {
 
 export const logout = (req, res) => {
   const cookies = [
-    ["authToken=", "HttpOnly", "SameSite=Lax", "Path=/", "Max-Age=0"],
-    ["authToken=", "HttpOnly", "SameSite=Lax", "Path=/api/auth", "Max-Age=0"],
+    [
+      "authToken=",
+      "HttpOnly",
+      `SameSite=${process.env.NODE_ENV === "production" ? "None" : "Lax"}`,
+      "Path=/",
+      "Max-Age=0",
+    ],
+    [
+      "authToken=",
+      "HttpOnly",
+      `SameSite=${process.env.NODE_ENV === "production" ? "None" : "Lax"}`,
+      "Path=/api/auth",
+      "Max-Age=0",
+    ],
   ];
   if (process.env.NODE_ENV === "production") {
     cookies.forEach((cookie) => cookie.push("Secure"));
