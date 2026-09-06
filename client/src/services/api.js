@@ -1,28 +1,19 @@
 import axios from "axios";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-});
-
-// Add auth token to requests if available
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("authToken");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
+  withCredentials: true,
 });
 
 // Handle response errors
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const isAuthRequest = error.config?.url?.includes("/auth/");
+    if (error.response?.status === 401 && !isAuthRequest) {
       // Token expired or invalid
-      localStorage.removeItem("authToken");
       localStorage.removeItem("user");
       window.location.href = "/login";
     }
@@ -34,8 +25,9 @@ apiClient.interceptors.response.use(
 export const authAPI = {
   signup: (name, email, password, address) =>
     apiClient.post("/auth/signup", { name, email, password, address }),
-  login: (email, password) =>
-    apiClient.post("/auth/login", { email, password }),
+  login: (email, password, role) =>
+    apiClient.post("/auth/login", { email, password, role }),
+  logout: () => apiClient.post("/auth/logout"),
 };
 
 // User APIs
@@ -65,9 +57,11 @@ export const adminAPI = {
   getUserById: (id) => apiClient.get(`/admin/users/${id}`),
   createUser: (name, email, password, address, role) =>
     apiClient.post("/admin/users", { name, email, password, address, role }),
+  deleteUser: (id) => apiClient.delete(`/admin/users/${id}`),
   listStores: (params = {}) => apiClient.get("/admin/stores", { params }),
   createStore: (name, email, address, ownerId = null) =>
     apiClient.post("/admin/stores", { name, email, address, ownerId }),
+  deleteStore: (id) => apiClient.delete(`/admin/stores/${id}`),
 };
 
 export default apiClient;

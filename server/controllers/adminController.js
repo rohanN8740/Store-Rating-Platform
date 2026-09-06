@@ -217,6 +217,32 @@ export const createUser = async (req, res) => {
   }
 };
 
+export const deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (String(id) === String(req.user.id)) {
+      return res
+        .status(400)
+        .json({ error: "You cannot delete your own account" });
+    }
+
+    const result = await pool.query(
+      "DELETE FROM users WHERE id = $1 RETURNING id, name, email",
+      [id],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({ message: "User deleted successfully", user: result.rows[0] });
+  } catch (error) {
+    console.error("Delete user error:", error);
+    res.status(500).json({ error: "An error occurred while deleting user" });
+  }
+};
+
 export const listStores = async (req, res) => {
   try {
     const { name, email, address, sortBy = "name", order = "asc" } = req.query;
@@ -358,5 +384,24 @@ export const createStore = async (req, res) => {
     res.status(500).json({
       error: "An error occurred while creating store",
     });
+  }
+};
+
+export const deleteStore = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      "DELETE FROM stores WHERE id = $1 RETURNING id, name, email",
+      [id],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Store not found" });
+    }
+
+    res.json({ message: "Store deleted successfully", store: result.rows[0] });
+  } catch (error) {
+    console.error("Delete store error:", error);
+    res.status(500).json({ error: "An error occurred while deleting store" });
   }
 };

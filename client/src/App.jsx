@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   BrowserRouter,
   NavLink,
@@ -18,6 +18,32 @@ import {
 import { useAuth } from "./context/AuthContext";
 
 const authDefaults = { name: "", email: "", password: "", address: "" };
+const loginRoles = [
+  {
+    value: "USER",
+    label: "User",
+    email: "user@storerating.com",
+    password: "UserPass@123",
+  },
+  {
+    value: "STORE_OWNER",
+    label: "Store owner",
+    email: "owner@storerating.com",
+    password: "OwnerPass@123",
+  },
+  {
+    value: "ADMIN",
+    label: "Admin",
+    email: "admin@storerating.com",
+    password: "AdminPass@123",
+  },
+];
+
+function getRoleHome(role) {
+  if (role === "ADMIN") return "/admin";
+  if (role === "STORE_OWNER") return "/owner";
+  return "/";
+}
 
 function Stars({ value = 0 }) {
   const rounded = Math.round(Number(value));
@@ -150,22 +176,28 @@ function AuthPage({ mode }) {
   const [form, setForm] = useState(authDefaults);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [selectedRole, setSelectedRole] = useState("USER");
   const isLogin = mode === "login";
+  const autofillCredentials = () => {
+    const role = loginRoles.find((item) => item.value === selectedRole);
+    setForm({ ...form, email: role.email, password: role.password });
+    setError("");
+  };
   const submit = async (event) => {
     event.preventDefault();
     setError("");
     setBusy(true);
     try {
       const result = isLogin
-        ? await authAPI.login(form.email, form.password)
+        ? await authAPI.login(form.email, form.password, selectedRole)
         : await authAPI.signup(
             form.name,
             form.email,
             form.password,
             form.address,
           );
-      login(result.data.user, result.data.token);
-      navigate("/");
+      login(result.data.user);
+      navigate(isLogin ? getRoleHome(result.data.user.role) : "/");
     } catch (requestError) {
       setError(
         requestError.response?.data?.error ||
@@ -184,6 +216,37 @@ function AuthPage({ mode }) {
             ? "Access your ratings and profile."
             : "Register as a store rating user."}
         </p>
+        {isLogin && (
+          <div className="login-role-selector" aria-label="Choose account type">
+            {loginRoles.map((role) => (
+              <button
+                className={
+                  selectedRole === role.value
+                    ? "login-role active"
+                    : "login-role"
+                }
+                key={role.value}
+                type="button"
+                aria-pressed={selectedRole === role.value}
+                onClick={() => {
+                  setSelectedRole(role.value);
+                  setError("");
+                }}
+              >
+                {role.label}
+              </button>
+            ))}
+          </div>
+        )}
+        {isLogin && (
+          <button
+            className="button secondary autofill-button"
+            type="button"
+            onClick={autofillCredentials}
+          >
+            Autofill credentials
+          </button>
+        )}
         <form onSubmit={submit}>
           {!isLogin && (
             <>
@@ -269,7 +332,7 @@ function StoreCard({ store, onRate }) {
             <button
               key={value}
               title={`Rate ${value} out of 5`}
-              onClick={() => onRate(store.id, value)}
+              onClick={() => onRate(store, value)}
             >
               {value}
             </button>
@@ -279,6 +342,26 @@ function StoreCard({ store, onRate }) {
     </article>
   );
 }
+
+const applyRating = (stores, storeId, rating, previousRating, ratingId) =>
+  stores.map((store) => {
+    if (String(store.id) !== String(storeId)) return store;
+
+    const totalRatings = Number(store.total_ratings || 0);
+    const averageRating = Number(store.avg_rating || 0);
+    const hasPreviousRating = previousRating !== undefined;
+
+    return {
+      ...store,
+      total_ratings: hasPreviousRating ? totalRatings : totalRatings + 1,
+      avg_rating: hasPreviousRating
+        ? (averageRating * totalRatings - previousRating + rating) /
+          totalRatings
+        : (averageRating * totalRatings + rating) / (totalRatings + 1),
+      user_rating_id: ratingId || store.user_rating_id,
+      user_rating: rating,
+    };
+  });
 
 function DirectoryGuide() {
   return (
@@ -342,13 +425,27 @@ function Discover({
       )
       .finally(() => setLoading(false));
   }, [search, address, sortBy, order]);
-  const rate = async (storeId, value) => {
+  const rate = async (store, value) => {
     if (!isAuthenticated) {
       navigate("/login");
       return;
     }
     try {
-      await ratingAPI.submitRating(storeId, value);
+      let response;
+      if (store.user_rating_id) {
+        response = await ratingAPI.updateRating(store.user_rating_id, value);
+      } else {
+        response = await ratingAPI.submitRating(store.id, value);
+      }
+      setStores((currentStores) =>
+        applyRating(
+          currentStores,
+          store.id,
+          value,
+          store.user_rating_id ? Number(store.user_rating) : undefined,
+          response.data.rating.id,
+        ),
+      );
       setMessage("Rating submitted successfully.");
     } catch (error) {
       setMessage(error.response?.data?.error || "Unable to submit rating.");
@@ -467,13 +564,27 @@ function Home() {
       .catch(() => setMessage("Unable to load the store overview."));
   }, []);
 
-  const rate = async (storeId, value) => {
+  const rate = async (store, value) => {
     if (!isAuthenticated) {
       navigate("/login");
       return;
     }
     try {
-      await ratingAPI.submitRating(storeId, value);
+      let response;
+      if (store.user_rating_id) {
+        response = await ratingAPI.updateRating(store.user_rating_id, value);
+      } else {
+        response = await ratingAPI.submitRating(store.id, value);
+      }
+      setStores((currentStores) =>
+        applyRating(
+          currentStores,
+          store.id,
+          value,
+          store.user_rating_id ? Number(store.user_rating) : undefined,
+          response.data.rating.id,
+        ),
+      );
       setMessage("Rating submitted successfully.");
     } catch (error) {
       setMessage(error.response?.data?.error || "Unable to submit rating.");
@@ -647,7 +758,7 @@ function Profile() {
   );
 }
 
-function Table({ headers, rows }) {
+function Table({ headers, rows, renderExpandedRow }) {
   return (
     <div className="table-wrap">
       <table>
@@ -660,13 +771,26 @@ function Table({ headers, rows }) {
         </thead>
         <tbody>
           {rows.length ? (
-            rows.map((row, index) => (
-              <tr key={index}>
-                {row.map((cell, cellIndex) => (
-                  <td key={cellIndex}>{cell}</td>
-                ))}
-              </tr>
-            ))
+            rows.map((row, index) => {
+              const cells = Array.isArray(row) ? row : row.cells;
+              const data = Array.isArray(row) ? null : row.data;
+              const expandedContent = renderExpandedRow?.(data, index);
+
+              return (
+                <React.Fragment key={index}>
+                  <tr>
+                    {cells.map((cell, cellIndex) => (
+                      <td key={cellIndex}>{cell}</td>
+                    ))}
+                  </tr>
+                  {expandedContent && (
+                    <tr className="expanded-table-row">
+                      <td colSpan={headers.length}>{expandedContent}</td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })
           ) : (
             <tr>
               <td colSpan={headers.length}>No records found.</td>
@@ -679,9 +803,17 @@ function Table({ headers, rows }) {
 }
 
 function Admin() {
+  const { user: currentUser } = useAuth();
   const [dashboard, setDashboard] = useState(null);
   const [users, setUsers] = useState([]);
   const [stores, setStores] = useState([]);
+  const [userFilters, setUserFilters] = useState({
+    name: "",
+    email: "",
+    address: "",
+    role: "",
+  });
+  const [selectedUser, setSelectedUser] = useState(null);
   const [message, setMessage] = useState("");
   const [userForm, setUserForm] = useState({
     name: "",
@@ -698,10 +830,30 @@ function Admin() {
   });
   const load = () => {
     adminAPI.getDashboard().then((result) => setDashboard(result.data));
-    adminAPI.listUsers().then((result) => setUsers(result.data));
+    adminAPI.listUsers(userFilters).then((result) => setUsers(result.data));
     adminAPI.listStores().then((result) => setStores(result.data));
   };
-  useEffect(load, []);
+  useEffect(load, [
+    userFilters.name,
+    userFilters.email,
+    userFilters.address,
+    userFilters.role,
+  ]);
+
+  const viewUser = async (userId) => {
+    if (String(selectedUser?.id) === String(userId)) {
+      setSelectedUser(null);
+      return;
+    }
+
+    try {
+      const result = await adminAPI.getUserById(userId);
+      setSelectedUser(result.data);
+    } catch (error) {
+      setMessage(error.response?.data?.error || "Unable to load user details.");
+    }
+  };
+
   const submit = async (event, type) => {
     event.preventDefault();
     try {
@@ -735,6 +887,33 @@ function Admin() {
       setMessage(error.response?.data?.error || `Unable to create ${type}.`);
     }
   };
+  const removeUser = async (user) => {
+    if (String(user.id) === String(currentUser?.id)) return;
+
+    if (
+      !window.confirm(
+        `Delete user ${user.name}? This may delete their store and ratings.`,
+      )
+    )
+      return;
+    try {
+      await adminAPI.deleteUser(user.id);
+      setMessage("User deleted successfully.");
+      load();
+    } catch (error) {
+      setMessage(error.response?.data?.error || "Unable to delete user.");
+    }
+  };
+  const removeStore = async (store) => {
+    if (!window.confirm(`Delete store ${store.name} and its ratings?`)) return;
+    try {
+      await adminAPI.deleteStore(store.id);
+      setMessage("Store deleted successfully.");
+      load();
+    } catch (error) {
+      setMessage(error.response?.data?.error || "Unable to delete store.");
+    }
+  };
   return (
     <main className="content admin-content">
       <section className="page-heading">
@@ -755,8 +934,8 @@ function Admin() {
       </section>
       {message && <p className="message info">{message}</p>}
       <section className="admin-columns">
-        <section className="data-panel">
-          <h2>Add user</h2>
+        <details className="data-panel collapsible-panel">
+          <summary>Add user</summary>
           <form onSubmit={(e) => submit(e, "user")}>
             <label>
               Name
@@ -816,9 +995,9 @@ function Admin() {
             </label>
             <button className="button primary">Create user</button>
           </form>
-        </section>
-        <section className="data-panel">
-          <h2>Add store</h2>
+        </details>
+        <details className="data-panel collapsible-panel">
+          <summary>Add store</summary>
           <form onSubmit={(e) => submit(e, "store")}>
             <label>
               Store name
@@ -854,35 +1033,151 @@ function Admin() {
               />
             </label>
             <label>
-              Owner ID
-              <input
+              Store owner
+              <select
                 value={storeForm.ownerId}
                 onChange={(e) =>
                   setStoreForm({ ...storeForm, ownerId: e.target.value })
                 }
-                placeholder="Optional"
-              />
+              >
+                <option value="">Unassigned</option>
+                {users
+                  .filter((item) => item.role === "STORE_OWNER")
+                  .map((owner) => (
+                    <option value={owner.id} key={owner.id}>
+                      {owner.name} ({owner.email})
+                    </option>
+                  ))}
+              </select>
             </label>
             <button className="button primary">Create store</button>
           </form>
-        </section>
+        </details>
       </section>
       <section className="table-panel">
-        <h2>Users</h2>
+        <div className="section-heading admin-section-heading">
+          <h2>Users</h2>
+          <span className="subtle">{users.length} matching users</span>
+        </div>
+        <div className="admin-filters">
+          <label>
+            Name
+            <input
+              value={userFilters.name}
+              onChange={(e) =>
+                setUserFilters({ ...userFilters, name: e.target.value })
+              }
+              placeholder="Search name"
+            />
+          </label>
+          <label>
+            Email
+            <input
+              value={userFilters.email}
+              onChange={(e) =>
+                setUserFilters({ ...userFilters, email: e.target.value })
+              }
+              placeholder="Search email"
+            />
+          </label>
+          <label>
+            Address
+            <input
+              value={userFilters.address}
+              onChange={(e) =>
+                setUserFilters({ ...userFilters, address: e.target.value })
+              }
+              placeholder="Search address"
+            />
+          </label>
+          <label>
+            Role
+            <select
+              value={userFilters.role}
+              onChange={(e) =>
+                setUserFilters({ ...userFilters, role: e.target.value })
+              }
+            >
+              <option value="">All roles</option>
+              <option value="USER">USER</option>
+              <option value="STORE_OWNER">STORE_OWNER</option>
+              <option value="ADMIN">ADMIN</option>
+            </select>
+          </label>
+        </div>
         <Table
-          headers={["Name", "Email", "Role"]}
-          rows={users.map((item) => [item.name, item.email, item.role])}
+          headers={["Name", "Email", "Role", "Actions"]}
+          rows={users.map((item) => ({
+            data: item,
+            cells: [
+              item.name,
+              item.email,
+              item.role,
+              <div className="table-actions" key={`user-actions-${item.id}`}>
+                <button
+                  className="button secondary table-action"
+                  onClick={() => viewUser(item.id)}
+                >
+                  {String(selectedUser?.id) === String(item.id)
+                    ? "Close"
+                    : "Details"}
+                </button>
+                {String(item.id) === String(currentUser?.id) ? (
+                  <span className="subtle">Current account</span>
+                ) : (
+                  <button
+                    className="button danger table-action"
+                    onClick={() => removeUser(item)}
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>,
+            ],
+          }))}
+          renderExpandedRow={(item) =>
+            String(selectedUser?.id) === String(item?.id) ? (
+              <div className="user-details">
+                <h3>User details</h3>
+                <dl>
+                  <dt>Name</dt>
+                  <dd>{selectedUser.name}</dd>
+                  <dt>Email</dt>
+                  <dd>{selectedUser.email}</dd>
+                  <dt>Address</dt>
+                  <dd>{selectedUser.address}</dd>
+                  <dt>Role</dt>
+                  <dd>{selectedUser.role}</dd>
+                  {selectedUser.role === "STORE_OWNER" && (
+                    <>
+                      <dt>Store rating</dt>
+                      <dd>
+                        {Number(selectedUser.store_rating || 0).toFixed(1)} / 5
+                      </dd>
+                    </>
+                  )}
+                </dl>
+              </div>
+            ) : null
+          }
         />
       </section>
       <section className="table-panel">
         <h2>Stores</h2>
         <Table
-          headers={["Name", "Email", "Owner", "Rating"]}
+          headers={["Name", "Email", "Owner", "Rating", "Actions"]}
           rows={stores.map((item) => [
             item.name,
             item.email,
             item.owner_name || "Unassigned",
             `${Number(item.avg_rating).toFixed(1)} (${item.total_ratings})`,
+            <button
+              className="button danger table-action"
+              key={`delete-store-${item.id}`}
+              onClick={() => removeStore(item)}
+            >
+              Delete
+            </button>,
           ])}
         />
       </section>
@@ -900,7 +1195,7 @@ function Owner() {
         setStores(
           result.data.filter(
             (store) =>
-              store.owner_id === user?.id || store.ownerId === user?.id,
+              String(store.owner_id ?? store.ownerId) === String(user?.id),
           ),
         ),
       );

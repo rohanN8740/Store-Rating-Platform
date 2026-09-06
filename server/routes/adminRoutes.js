@@ -6,8 +6,10 @@ import {
   listUsers,
   getUserById,
   createUser,
+  deleteUser,
   listStores,
   createStore,
+  deleteStore,
 } from "../controllers/adminController.js";
 
 const router = express.Router();
@@ -23,6 +25,7 @@ router.get("/users", listUsers);
 
 // POST /api/admin/users
 router.post("/users", createUser);
+router.delete("/users/:id", deleteUser);
 
 // GET /api/admin/users/:id
 router.get("/users/:id", getUserById);
@@ -32,5 +35,6 @@ router.get("/stores", listStores);
 
 // POST /api/admin/stores
 router.post("/stores", createStore);
+router.delete("/stores/:id", deleteStore);
 
 export default router;

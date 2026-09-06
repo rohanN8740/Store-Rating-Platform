@@ -22,40 +22,52 @@ async function seed() {
     await pool.query(schema);
     console.log("✅ Schema created successfully");
 
-    // Check if admin already exists
-    const adminCheckResult = await pool.query(
-      "SELECT id FROM users WHERE email = $1",
-      ["admin@storerating.com"],
-    );
-
-    if (adminCheckResult.rows.length > 0) {
-      console.log("ℹ️  Admin user already exists. Skipping seed.");
-      await pool.end();
-      return;
-    }
-
-    // Hash password: AdminPass@123
-    const hashedPassword = await bcrypt.hash("AdminPass@123", 10);
-
-    // Seed admin user
-    console.log("👤 Seeding admin user...");
-    await pool.query(
-      `INSERT INTO users (name, email, password, address, role)
-       VALUES ($1, $2, $3, $4, $5)`,
+    const demoUsers = [
       [
         "System Administrator",
         "admin@storerating.com",
-        hashedPassword,
+        "AdminPass@123",
         "123 Admin Street, City, Country",
         "ADMIN",
       ],
-    );
-    console.log("✅ Admin user created successfully");
+      [
+        "Demo Store Rating User",
+        "user@storerating.com",
+        "UserPass@123",
+        "123 User Street, City, Country",
+        "USER",
+      ],
+      [
+        "Demo Store Owner Account",
+        "owner@storerating.com",
+        "OwnerPass@123",
+        "123 Owner Street, City, Country",
+        "STORE_OWNER",
+      ],
+    ];
+
+    for (const [name, email, password, address, role] of demoUsers) {
+      const existingUser = await pool.query(
+        "SELECT id FROM users WHERE email = $1",
+        [email],
+      );
+
+      if (!existingUser.rows.length) {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        await pool.query(
+          `INSERT INTO users (name, email, password, address, role)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [name, email, hashedPassword, address, role],
+        );
+        console.log(`✅ Seeded ${role} demo account: ${email}`);
+      }
+    }
 
     console.log("\n🎉 Database initialization complete!\n");
-    console.log("Admin Credentials:");
-    console.log("  Email: admin@storerating.com");
-    console.log("  Password: AdminPass@123\n");
+    console.log("Demo Credentials:");
+    console.log("  User: user@storerating.com / UserPass@123");
+    console.log("  Store owner: owner@storerating.com / OwnerPass@123");
+    console.log("  Admin: admin@storerating.com / AdminPass@123\n");
 
     await pool.end();
   } catch (error) {

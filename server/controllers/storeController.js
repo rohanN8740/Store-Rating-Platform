@@ -10,15 +10,19 @@ export const listStores = async (req, res) => {
         s.name, 
         s.email, 
         s.address,
+        s.owner_id,
+        ur.id as user_rating_id,
+        ur.rating as user_rating,
         COALESCE(AVG(r.rating), 0) as avg_rating,
         COUNT(CASE WHEN r.id IS NOT NULL THEN 1 END) as total_ratings
       FROM stores s
       LEFT JOIN ratings r ON s.id = r.store_id
+      LEFT JOIN ratings ur ON ur.store_id = s.id AND ur.user_id = $1
       WHERE 1=1
     `;
 
-    const params = [];
-    let paramCount = 1;
+    const params = [req.user?.id || null];
+    let paramCount = 2;
 
     // Add filters
     if (name) {
@@ -34,7 +38,7 @@ export const listStores = async (req, res) => {
     }
 
     // Group by to aggregate ratings
-    query += ` GROUP BY s.id, s.name, s.email, s.address`;
+    query += ` GROUP BY s.id, s.name, s.email, s.address, s.owner_id, ur.id, ur.rating`;
 
     // Sorting
     const validSortFields = ["name", "address", "avg_rating"];

@@ -21,6 +21,28 @@ const generateToken = (user) => {
   );
 };
 
+const setAuthCookie = (res, token) => {
+  const attributes = [
+    "HttpOnly",
+    "SameSite=Lax",
+    "Path=/",
+    `Max-Age=${7 * 24 * 60 * 60}`,
+  ];
+  if (process.env.NODE_ENV === "production") attributes.push("Secure");
+  const oldCookie = [
+    "authToken=",
+    "HttpOnly",
+    "SameSite=Lax",
+    "Path=/api/auth",
+    "Max-Age=0",
+  ];
+  if (process.env.NODE_ENV === "production") oldCookie.push("Secure");
+  res.setHeader("Set-Cookie", [
+    `authToken=${token}; ${attributes.join("; ")}`,
+    oldCookie.join("; "),
+  ]);
+};
+
 export const signup = async (req, res) => {
   try {
     const { name, email, password, address, role } = req.body;
@@ -94,6 +116,7 @@ export const signup = async (req, res) => {
 
     const user = result.rows[0];
     const token = generateToken(user);
+    setAuthCookie(res, token);
 
     res.status(201).json({
       message: "User registered successfully",
@@ -103,7 +126,6 @@ export const signup = async (req, res) => {
         email: user.email,
         role: user.role,
       },
-      token,
     });
   } catch (error) {
     console.error("Signup error:", error);
@@ -115,7 +137,7 @@ export const signup = async (req, res) => {
 
 export const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role } = req.body;
 
     // Validation
     if (!email || !password) {
@@ -153,7 +175,14 @@ export const login = async (req, res) => {
       });
     }
 
+    if (role && validateRole(role) && user.role !== role) {
+      return res.status(401).json({
+        error: "The selected account type does not match this account",
+      });
+    }
+
     const token = generateToken(user);
+    setAuthCookie(res, token);
 
     res.json({
       message: "Login successful",
@@ -163,7 +192,6 @@ export const login = async (req, res) => {
         email: user.email,
         role: user.role,
       },
-      token,
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -171,4 +199,19 @@ export const login = async (req, res) => {
       error: "An error occurred during login",
     });
   }
+};
+
+export const logout = (req, res) => {
+  const cookies = [
+    ["authToken=", "HttpOnly", "SameSite=Lax", "Path=/", "Max-Age=0"],
+    ["authToken=", "HttpOnly", "SameSite=Lax", "Path=/api/auth", "Max-Age=0"],
+  ];
+  if (process.env.NODE_ENV === "production") {
+    cookies.forEach((cookie) => cookie.push("Secure"));
+  }
+  res.setHeader(
+    "Set-Cookie",
+    cookies.map((cookie) => cookie.join("; ")),
+  );
+  res.json({ message: "Logout successful" });
 };

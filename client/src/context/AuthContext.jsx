@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect } from "react";
+import { authAPI } from "../services/api";
 
 export const AuthContext = createContext();
 
@@ -9,29 +10,32 @@ export const AuthProvider = ({ children }) => {
 
   // Initialize from localStorage
   useEffect(() => {
-    const savedToken = localStorage.getItem("authToken");
     const savedUser = localStorage.getItem("user");
 
-    if (savedToken && savedUser) {
-      setToken(savedToken);
+    if (savedUser) {
+      setToken("cookie");
       setUser(JSON.parse(savedUser));
     }
+
+    localStorage.removeItem("authToken");
 
     setLoading(false);
   }, []);
 
-  const login = (userData, authToken) => {
+  const login = (userData) => {
     setUser(userData);
-    setToken(authToken);
-    localStorage.setItem("authToken", authToken);
+    setToken("cookie");
     localStorage.setItem("user", JSON.stringify(userData));
   };
 
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("user");
+  const logout = async () => {
+    try {
+      await authAPI.logout();
+    } finally {
+      setUser(null);
+      setToken(null);
+      localStorage.removeItem("user");
+    }
   };
 
   const value = {
